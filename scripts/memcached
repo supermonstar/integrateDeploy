@@ -1,0 +1,58 @@
+#!/bin/bash 
+
+IPADDR="127.0.0.1"
+PORT="11211"
+USER="root"
+SIZE="1024"
+CONNNUM="51200"
+PIDFILE="/data/memcached/run/memcached.pid"
+BINFILE="/data/memcached/bin/memcached"
+LOCKFILE="/var/lock/subsys/memcached"
+RETVAL=0
+
+start() {
+    echo -n $"Starting memcached......"
+    $BINFILE -d -l $IPADDR -p $PORT -u $USER -m $SIZE -c $CONNNUM -P $PIDFILE
+    RETVAL=$?
+    echo
+    [ $RETVAL -eq 0 ] && touch $LOCKFILE
+               
+    return $RETVAL
+}
+
+stop() {
+    echo -n $"Shutting down memcached......"
+    /usr/bin/kill `cat $PIDFILE`
+    RETVAL=$?
+    echo
+    [ $RETVAL -eq 0 ] && rm -f $LOCKFILE
+               
+    return $RETVAL
+}
+
+restart() {
+    stop
+    sleep 1
+    start
+}
+
+
+case "$1" in
+    start)
+        start
+        ;;
+                   
+    stop)
+        stop
+        ;;
+    
+    restart)
+        restart
+        ;;
+                   
+    *)
+        echo "Usage: $0 {start|stop}"
+        RETVAL=1
+esac
+            
+exit $RETVAL

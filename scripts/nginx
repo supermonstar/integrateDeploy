@@ -1,0 +1,25 @@
+#!/bin/bash
+
+PID=/data/logs/nginx/nginx.pid
+
+case $1 in
+    start)
+    /data/nginx/bin/nginx
+    echo "nginx start-up seccess."
+    ;;
+    stop)
+    kill -QUIT `cat $PID`
+    echo "nginx stop seccess."
+    ;;
+    reload)
+    kill -HUP `cat $PID`
+    echo "nginx reload seccess."
+    ;;
+    restart)
+    /data/console/nginx stop
+    /data/console/nginx start
+    echo "nginx restart seccess."
+    ;;
+    *)
+    echo "Please use the start|stop|reload|restart."
+esac

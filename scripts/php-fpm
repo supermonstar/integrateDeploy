@@ -1,0 +1,22 @@
+#!/bin/bash
+
+
+PID=/data/php/var/run/php-fpm.pid
+
+case $1 in
+    start)
+    /data/php/sbin/php-fpm -c /data/php/etc/php.ini -y /data/php/etc/php-fpm.conf
+    echo "php-fpm start-up seccess."
+    ;;
+    stop)
+    kill -INT `cat $PID`
+    echo "php-fpm stop seccess."
+    ;;
+    restart)
+    kill -USR2 `cat $PID`
+    echo "php-fpm restart seccess."
+    ;;
+    *)
+    echo "Please use the start|stop|restart."
+    ;;
+esac

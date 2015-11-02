@@ -1,0 +1,278 @@
+#!/bin/bash
+#filename: webEnv.sh
+#author: JasonZhong
+#datetime: 2015/10/22 10:30:00
+
+if [ $UID -ne 0 ];then
+    echo -e "\033[41mYou are not the root user, can't execute a program!!!!!!\033[0m"
+    exit 1
+fi
+
+mkdir -p /data/{console,data,software,logs,projects,backup}
+
+SOFTWARE=/data/software
+BASEPATH=$(cd `dirname $0`; pwd)
+
+function installnginx(){
+    NGINXLOG=/data/logs/nginx
+    yum install -y wget gcc gcc-c++ automake autoconf libtool make openssl-devel
+    
+    tar -zxvf ${BASEPATH}/../package/pcre-8.37.tar.gz -C ${SOFTWARE}/
+    cd $SOFTWARE/pcre-8.37 && ./configure
+    make && make install
+
+    tar -zxvf ${BASEPATH}/../package/zlib-1.2.8.tar.gz -C ${SOFTWARE}/
+    cd $SOFTWARE/zlib-1.2.8 && ./configure
+    make && make install
+    
+    mkdir -p "${NGINXLOG}"
+
+    tar -zxvf ${BASEPATH}/../package/nginx-1.8.0.tar.gz -C ${SOFTWARE}/
+    cd $SOFTWARE/nginx-1.8.0
+    
+    ./configure --prefix=/data/nginx \
+    --error-log-path=/data/logs/nginx/error.log \
+    --http-log-path=/data/logs/nginx/access.log \
+    --sbin-path=/data/nginx/bin/nginx \
+    --conf-path=/data/nginx/conf/nginx.conf \
+    --pid-path=/data/logs/nginx/nginx.pid \
+    --with-pcre=$SOFTWARE/pcre-8.37 \
+    --with-zlib=$SOFTWARE/zlib-1.2.8 \
+    --with-http_stub_status_module \
+    --with-http_gzip_static_module \
+    --without-http_auth_basic_module \
+    --without-http_autoindex_module \
+    --without-http_browser_module \
+    --without-http_empty_gif_module \
+    --without-http_geo_module \
+    --without-http_limit_conn_module \
+    --without-http_limit_req_module \
+    --without-http_map_module \
+    --without-http_memcached_module \
+    --without-http_referer_module \
+    --without-http_split_clients_module \
+    --without-http_ssi_module \
+    --without-http_userid_module \
+    --without-mail_imap_module \
+    --without-mail_pop3_module \
+    --without-mail_smtp_module \
+    --without-poll_module \
+    --with-http_ssl_module \
+    --without-select_module
+
+    make && make install
+    
+    mkdir -p /data/nginx/conf/vhost
+    cp -r -f ${BASEPATH}/../template/nginx.conf.template /data/nginx/conf/nginx.conf
+    cp -r -f ${BASEPATH}/../template/vhost.conf.template /data/nginx/conf/vhost/vhost.conf
+    cp -r -f ${BASEPATH}/../scripts/nginx /data/console/
+    chmod 755 /data/console/nginx
+
+    echo "export PATH=/data/nginx/bin:$PATH" >> /etc/profile; source /etc/profile
+}
+
+
+function installphp(){
+    yum install -y gcc gcc-c++ autoconf automake libjpeg libjpeg-devel libpng libpng-devel \
+    freetype freetype-devel libxml2 libxml2-devel zlib zlib-devel glibc glibc-devel glibc2 \
+    glibc2-devel bzip2 bzip2-devel ncurses ncurses-devel curl curl-devel e2fsprogs e2fsprogs-devel \
+    krb5 krb5-devel libidn libidn-devel openssl openssl-devel openldap openldap-devel nss_ldap \
+    openldap-clients openldap-servers gd gd2 gd-devel gd2-devel perl-CPAN pcre-devel libicu-devel
+
+    tar -xf ${BASEPATH}/../package/php-5.6.14.tar.gz -C ${SOFTWARE}/
+    cd $SOFTWARE/php-5.6.14
+
+    ./configure --prefix=/data/php \
+    --with-config-file-path=/data/php/etc \
+    --with-libdir=lib64 \
+    --enable-fpm \
+    --enable-mysqlnd \
+    --with-mysql=mysqlnd \
+    --with-mysqli=mysqlnd \
+    --with-pdo-mysql=mysqlnd \
+    --enable-opcache \
+    --enable-pcntl \
+    --enable-mbstring \
+    --enable-soap \
+    --enable-zip \
+    --enable-calendar \
+    --enable-bcmath \
+    --enable-exif \
+    --enable-ftp \
+    --enable-intl \
+    --with-openssl \
+    --with-zlib \
+    --with-curl \
+    --with-gd \
+    --with-zlib-dir=/usr/lib \
+    --with-png-dir=/usr/lib \
+    --with-jpeg-dir=/usr/lib \
+    --with-gettext \
+    --with-mhash \
+    --with-ldap
+    make && make install
+
+
+    cp $SOFTWARE/php-5.6.14/php.ini-production /data/php/etc/php.ini
+    cp -r -f ${BASEPATH}/../template/php-fpm.conf.template /data/php/etc/php-fpm.conf
+    cp -r -f ${BASEPATH}/../scripts/php-fpm /data/console/
+    mkdir -p /data/logs/php
+    
+    echo "export PATH=/data/php/bin:$PATH" >> /etc/profile; source /etc/profile
+}
+
+
+function installmysql(){
+    yum install -y gcc gcc-c++ cmake ncurses-devel wget openssl-devel
+    
+    tar xf ${BASEPATH}/../package/mysql-5.6.13.tar.gz -C ${SOFTWARE}/
+    cd $SOFTWARE/mysql-5.6.13
+
+    useradd mysql
+    if [ ! -d /data/data/mysql ];then
+        mkdir -p /data/data/mysql
+        chown -R mysql.mysql /data/data/mysql
+    fi
+
+    cmake \
+    -DCMAKE_INSTALL_PREFIX=/data/mysql \
+    -DMYSQL_UNIX_ADDR=/data/mysql/mysql.sock \
+    -DDEFAULT_CHARSET=utf8 \
+    -DDEFAULT_COLLATION=utf8_general_ci \
+    -DEXTRA_CHARSETS=all \
+    -DWITH_MYISAM_STORAGE_ENGINE=1 \
+    -DWITH_INNOBASE_STORAGE_ENGINE=1 \
+    -DWITH_ARCHIVE_STORAGE_ENGINE=1 \
+    -DWITH_BLACKHOLE_STORAGE_ENGINE=1 \
+    -DWITH_MEMORY_STORAGE_ENGINE=1 \
+    -DWITH_FEDERATED_STORAGE_ENGINE=1 \
+    -DWITH_READLINE=1 \
+    -DENABLED_LOCAL_INFILE=1 \
+    -DMYSQL_DATADIR=/data/data/mysql \
+    -DMYSQL_USER=mysql \
+    -DMYSQL_TCP_PORT=3306 \
+    -DSYSCONFDIR=/data/mysql/ \
+    -DWITH_SSL=yes
+
+    make && make install
+
+    mkdir -p /data/logs/mysql
+    chown -R mysql:mysql /data/mysql
+    chown -R mysql:mysql /data/data/mysql
+
+    /data/mysql/scripts/mysql_install_db --basedir=/data/mysql --datadir=/data/data/mysql --user=mysql
+    cp -r -f ${BASEPATH}/../template/my.cnf.template /data/mysql/my.cnf
+    cp /data/mysql/support-files/mysql.server /data/console/mysqld
+
+    echo "export PATH=/data/mysql/bin:$PATH" >> /etc/profile
+}
+
+function installredis(){
+    yum install -y wget gcc gcc-c++
+    
+    tar xf ${BASEPATH}/../package/redis-3.0.5.tar.gz -C ${SOFTWARE}/
+    cd $SOFTWARE/redis-3.0.5
+
+    make && make PREFIX=/data/redis install
+    mkdir -p /data/redis/{etc,run}
+    mkdir -p /data/data/redis/6379
+    mkdir -p /data/logs/redis
+    cp -r -f ${BASEPATH}/../template/redis.conf.template /data/redis/etc/redis_6379.conf
+    cp -r -f ${BASEPATH}/../scripts/redis /data/console/
+
+    echo "export PATH=/data/redis/bin:$PATH" >> /etc/profile
+}
+
+
+function installmongodb(){
+    yum install wget -y
+
+    cd $SOFTWARE
+    if [ ! -f mongodb-linux-x86_64-rhel62-3.0.6.tgz ];then
+        wget https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-rhel62-3.0.6.tgz
+        tar xf mongodb-linux-x86_64-rhel62-3.0.6.tgz
+    fi
+    mv mongodb-linux-x86_64-rhel62-3.0.6 /data/mongodb
+    mkdir -p /data/mongodb/etc
+}
+
+
+function installmemcached(){
+    yum install gcc gcc-c++ wget -y
+
+    tar xf ${BASEPATH}/../package/libevent-2.0.22-stable.tar.gz -C ${SOFTWARE}/
+    cd $SOFTWARE
+
+    ln -s $SOFTWARE/libevent-2.0.22-stable /usr/local/libevent
+    cd /usr/local/libevent
+    ./configure && make && make install
+
+    tar xf ${BASEPATH}/../package/memcached-1.4.24.tar.gz -C ${SOFTWARE}
+    cd $SOFTWARE/memcached-1.4.24
+
+    ./configure --prefix=/data/memcached --with-libevent=/usr/local/libevent
+    make && make install
+    ln -s /usr/local/lib/libevent-2.0.so.5 /usr/lib64/libevent-2.0.so.5
+    cp -r -f ${BASEPATH}/../scripts/memcached /data/console/
+    mkdir -p /data/memcached/run
+
+    echo "export PATH=/data/memcached/bin:$PATH" >> /etc/profile
+}
+
+
+function Menu(){
+    echo -e "\033[45mThis is an integrated environment deployment scripts.\033[0m\n"
+    echo -e "\033[44m1.install deployment nginx\033[0m"
+    echo -e "\033[44m2.install deployment php\033[0m"
+    echo -e "\033[44m3.install deployment mysql\033[0m"
+    echo -e "\033[44m4.install deployment redis\033[0m"
+    echo -e "\033[44m5.install deployment mongodb(Stop using)\033[0m"
+    echo -e "\033[44m6.install deployment memcached\033[0m"
+    echo -e "\033[44m7.exit program!\033[0m\n"
+
+
+    read -p "Please enter a number: " num
+
+    case $num in
+        1)
+        installnginx
+        echo -e "\n\033[42mNginx has been installed successfully.\033[0m"
+        ;;
+        2)
+        installphp
+        echo -e "\n\033[42mPHP has been installed successfully.\033[0m"
+        ;;
+        3)
+        installmysql
+        echo -e "\n\033[42mMySQL has been installed successfully.\033[0m"
+        ;;
+        4)
+        installredis
+        echo -e "\n\033[42mRedis has been installed successfully.\033[0m"
+        ;;
+        5)
+        while :
+        do
+        echo -e "\n\033[41mMongoDB Are being developed, Stop using.\033[0m"
+        Menu
+        # installmongodb
+        # echo -e "\n\033[42mMongoDB has been installed successfully.\033[0m"
+        done
+        ;;
+        6)
+        installmemcached
+        echo -e "\n\033[42mMemcached has been installed successfully.\033[0m"
+        ;;
+        7|q)
+        echo -e "\033[42mYou have withdrawn from the program!\033[0m"
+        exit 0
+        ;;
+        *)
+        while :
+        do
+            echo -e "\n\033[41mNOTE: Please enter the menu number!!!\033[0m\n"
+            Menu
+        done    
+    esac
+}
+Menu
